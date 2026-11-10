@@ -114,6 +114,9 @@ svg.pc.dragging{opacity:.25}
 .seats{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px}
 .seats div{background:var(--panel2);border-radius:9px;padding:6px 8px;border:1px solid transparent}
 .seats div.turn{border-color:var(--accent)}
+.seats div.free{cursor:pointer;border-style:dashed;border-color:var(--line)}
+.seats div.free:hover{border-color:var(--accent);color:var(--accent)}
+.chatPartner{font-size:12px;color:var(--muted);background:var(--panel2);border-radius:9px;padding:6px 9px}
 .seats small{display:block;color:var(--muted);font-size:11px}
 .legend{display:flex;gap:12px;font-size:12px;color:var(--muted);flex-wrap:wrap}
 .legend span b{display:inline-grid;place-items:center;width:17px;height:17px;border-radius:50%;color:#fff;font-size:11px;margin-right:4px}
@@ -262,6 +265,7 @@ button,.btn,.lv,.chatTabs button,.iconBtn{touch-action:manipulation}
     <div class="status" id="status">Escolha um modo para começar.</div>
     <div class="chat hide" id="chatBox">
       <div class="chatTabs"><button id="chatAll" class="on">Todos</button><button id="chatTeam" class="hide">🤝 Dupla</button></div>
+      <div class="chatPartner hide" id="chatPartner"></div>
       <div class="chatList" id="chatList"></div>
       <form class="chatForm" id="chatForm" autocomplete="off"><input id="chatInput" maxlength="140" placeholder="Mensagem para todos…"><button class="btn primary" type="submit">Enviar</button></form>
     </div>
@@ -1527,7 +1531,8 @@ function renderBars(){
     let seatsHTML = '';
     if(net.mode==='duo'){
       const mv = moverSeat();
-      seatsHTML = ['A1','B1','A2','B2'].map(s => { const p = net.players[s], c = colorOfTeam(teamOf(s)); return `<div class="${s===mv && !gameOver && hasOpp() ? 'turn':''}">${p ? esc(p.me ? net.name+' (você)' : p.name) : '<i>vaga livre</i>'}<small>${c==='w'?'♔ brancas':'♚ pretas'} · jogador ${s[1]}</small></div>`; }).join('');
+      const canSwap = !history.length && !net.spectator && net.seat !== 'A1';
+      seatsHTML = ['A1','B1','A2','B2'].map(s => { const p = net.players[s], c = colorOfTeam(teamOf(s)), free = !p && canSwap && s !== 'A1'; return `<div class="${s===mv && !gameOver && hasOpp() ? 'turn':''}${free ? ' free' : ''}" ${free ? `data-seat="${s}" title="Clique para sentar aqui"` : ''}>${p ? esc(p.me ? net.name+' (você)' : p.name) : (free ? '<i>vaga livre · sentar aqui</i>' : '<i>vaga livre</i>')}<small>${c==='w'?'♔ brancas':'♚ pretas'} · jogador ${s[1]}</small></div>`; }).join('');
     }
     $('botCard').innerHTML = net.spectator
       ? `<div class="avatar">👀</div><div><h2>Assistindo</h2><p>Você está como espectador nesta sala.</p></div>`
@@ -1995,9 +2000,14 @@ function setupSeat(){
   if(net.mode==='duo' && !net.spectator) joinTeamRoom();
 }
 async function joinTeamRoom(){
-  const T = myTeam(); if(!T || !net.lobby) return;
+  const T = myTeam(); if(!T || !net.lobby || net.mode !== 'duo') return;
   const name = `xz-${net.code}-team-${T.toLowerCase()}`;
   if(net.troom && net.troom.name === name) return;
+  if(net.troomJoining === name) return;
+  net.troomJoining = name;
+  try{ await joinTeamRoomNow(T, name); } finally { if(net.troomJoining === name) net.troomJoining = null; }
+}
+async function joinTeamRoomNow(T, name){
   await leaveTeamRoom();
   try{
     const tr = await net.lobby.join(name);
@@ -2149,7 +2159,8 @@ function ingestChat(which, peer, list){
 const chatVisible = () => mode==='online' && document.visibilityState !== 'hidden';
 function sendChat(text){
   text = cleanText(text).trim(); if(!text || !net.room) return;
-  const which = net.chatTab==='team' && net.troom ? 'team' : 'all';
+  const which = net.chatTab==='team' ? 'team' : 'all';
+  if(which==='team' && !net.troom){ toast('Conectando ao chat da dupla… tente de novo em instantes.'); joinTeamRoom(); return; }
   const m = {i: Math.random().toString(36).slice(2,12), t: Date.now(), x: text};
   net.myChat[which] = [...net.myChat[which], m].slice(-6);
   net.chatLog[which].set(m.i, {id:m.i, t:m.t, x:text, name:net.name, me:true});
@@ -2168,6 +2179,12 @@ function renderChat(){
   net.unread[net.chatTab] = 0;
   $('chatAll').innerHTML = 'Todos' + (net.unread.all ? ` <b>${net.unread.all}</b>` : '');
   $('chatTeam').innerHTML = '🤝 Dupla' + (net.unread.team ? ` <b>${net.unread.team}</b>` : '');
+  const T = myTeam(), partnerSeat = T ? T + (net.seat && net.seat[1]==='1' ? '2' : '1') : null;
+  const partner = partnerSeat && net.players[partnerSeat];
+  const ps = $('chatPartner');
+  ps.classList.toggle('hide', net.chatTab !== 'team');
+  ps.innerHTML = partner ? `🤝 Seu parceiro: <b>${esc(partner.name)}</b> <span class="dotOn"></span>`
+    : '⏳ Seu parceiro ainda não entrou. As mensagens daqui só chegam para ele quando entrar.' + (history.length ? '' : ' Para jogar na mesma dupla que um amigo, cliquem numa <b>vaga livre</b> do mesmo lado.');
   const msgs = [...net.chatLog[net.chatTab].values()].sort((a,b) => a.t-b.t).slice(-60);
   const list = $('chatList');
   const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 30;
@@ -2189,6 +2206,18 @@ function renderChat(){
 $('chatAll').onclick = () => { net.chatTab = 'all'; renderChat(); };
 $('chatTeam').onclick = () => { net.chatTab = 'team'; renderChat(); };
 $('chatForm').addEventListener('submit', e => { e.preventDefault(); sendChat($('chatInput').value); $('chatInput').value = ''; });
+
+// ---------- choose a seat (before the first move) ----------
+async function takeSeat(s){
+  if(mode!=='online' || !net.room || net.spectator || history.length || s===net.seat || net.seat==='A1' || s==='A1') return;
+  if(!seatsFor(net.mode).includes(s) || net.players[s]) return;
+  const oldT = myTeam();
+  net.seat = s;
+  if(myTeam() !== oldT){ await leaveTeamRoom(); net.chatLog.team = new Map(); net.myChat.team = []; }
+  setupSeat(); pushPresence(); render();
+  toast(`Você agora joga de ${playerColor==='w'?'brancas':'pretas'} (jogador ${s[1]}).`);
+}
+$('seatsBox').addEventListener('click', e => { const d = e.target.closest('[data-seat]'); if(d) takeSeat(d.dataset.seat); });
 
 // ---------- lobby buttons ----------
 
