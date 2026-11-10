@@ -1917,6 +1917,7 @@ function announce(){ /* rooms are no longer listed in the lobby */ }
 // (arrival time, then peer label) and pair 1st+2nd, 3rd+4th... The first of each pair hosts room "q<id>".
 const seek = {on:false, id:null, t:0, matched:false, pending:false, timer:null};
 net.seekers = [];
+function pairCode(s){ let h1 = 0x811c9dc5, h2 = 0x01000193; for(let i=0;i<s.length;i++){ const c = s.charCodeAt(i); h1 = Math.imul(h1 ^ c, 16777619) >>> 0; h2 = Math.imul(h2 + c, 2246822519) >>> 0; } return (h1.toString(36) + h2.toString(36)).replace(/[^a-z0-9]/g,'').slice(0,10).padEnd(6,'0'); }
 const randId = () => Math.random().toString(36).slice(2,10).replace(/[^a-z0-9]/g,'') || String(Date.now()%1e8);
 async function startSeek(keepT){
   if(!net.lobby){ toast('Modo online indisponível.'); return; }
@@ -1937,16 +1938,19 @@ function seekCheck(peers){
   net.seekers = (peers || []).filter(p => p.kind==='viewer' && p.presence && p.presence.seek && typeof p.presence.seek.id==='string')
     .map(p => ({peer:p.peer, me:!!p.sameTab, t:+p.presence.seek.t || 0, id:p.presence.seek.id.replace(/[^a-z0-9]/g,'').slice(0,10)}))
     .filter(s => s.id);
-  if((seek.on || seek.pending) && !net.seekers.some(s => s.me)) net.seekers.push({peer:'~', me:true, t:seek.t, id:seek.id});
+  // our own entry: only trust it once the server shows the *current* one (an old entry can linger for a moment)
+  net.seekers = net.seekers.filter(s => !s.me || s.id === seek.id);
+  if((seek.on || seek.pending) && !net.seekers.some(s => s.me)) net.seekers.push({peer:'~', me:true, t:seek.t, id:seek.id, local:true});
   net.seekers.sort((a,b) => (a.t - b.t) || (a.peer < b.peer ? -1 : a.peer > b.peer ? 1 : 0));
   if(!seek.on || seek.matched) return;
   const i = net.seekers.findIndex(s => s.me);
-  if(i < 0) return;
+  if(i < 0 || net.seekers[i].local) return;  // wait until everyone can see us in the queue
   const mate = net.seekers[i % 2 === 0 ? i + 1 : i - 1];
   if(!mate) return;                         // waiting for the next person in the queue
-  const host = net.seekers[i - (i % 2)];
+  const host = net.seekers[i - (i % 2)], guest = host === net.seekers[i] ? mate : net.seekers[i];
   seek.matched = true; seek.on = false; seek.pending = true;
-  const code = 'q' + host.id;
+  // the room name depends only on the two connections, so both sides always compute the same room
+  const code = 'q' + pairCode(host.peer + '|' + guest.peer);
   enterRoom(code, host.me ? 'quick' : 'quickjoin', null, {fromQueue:true, t:seek.t});
 }
 

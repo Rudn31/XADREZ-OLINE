@@ -39,7 +39,7 @@ function scheduleBroadcast(room) {
     if (!set) return;
     const msg = `event: peers\ndata: ${JSON.stringify({ room, peers: snapshot(room) })}\n\n`;
     for (const peer of set) { const c = clients.get(peer); if (c) c.res.write(msg); }
-  }, 40);
+  }, +process.env.BROADCAST_DELAY_MS || 40);
 }
 function joinRoom(peer, room) {
   const c = clients.get(peer);
