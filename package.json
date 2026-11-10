@@ -1,0 +1,13 @@
+{
+  "name": "xadrez-online",
+  "version": "1.0.0",
+  "description": "Xadrez online com bots (Elo 100 a 2000) e partidas entre pessoas reais",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "AGPL-3.0-or-later"
+}
