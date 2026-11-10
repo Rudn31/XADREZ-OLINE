@@ -1534,7 +1534,8 @@ function renderBars(){
       : `<div class="avatar">${net.mode==='duo'?'👥':'⚔️'}</div><div><h2>${net.mode==='duo'?'Duplas 2x2':'1 contra 1'}</h2><p>${hasOpp() ? 'Partida online contra pessoas reais.' : 'Compartilhe o código da sala.'}</p></div>`;
     $('seatsBox').innerHTML = seatsHTML; $('seatsBox').classList.toggle('hide', !seatsHTML);
     $('roomCode').classList.remove('hide');
-    $('roomCode').innerHTML = `Sala <b>${esc(net.code)}</b><button class="btn" id="copyCode">Copiar código</button>`;
+    const inRoom = Object.keys(net.players).length + (net.spectator ? 1 : 0) + net.others.filter(p => p.presence.seat==='spec').length;
+    $('roomCode').innerHTML = `Sala <b>${esc(net.code)}</b><span style="font-size:12px">· ${inRoom} na sala</span><button class="btn" id="copyCode">Copiar código</button>`;
     const invite = window.__serverRoom ? location.origin + location.pathname + '#sala-' + net.code : net.code;
     if(window.__serverRoom) $('copyCode').textContent = 'Copiar link de convite';
     $('copyCode').onclick = () => { try{ navigator.clipboard.writeText(invite).then(()=>toast(window.__serverRoom ? 'Link copiado! Mande para seu amigo.' : 'Código copiado!'), ()=>toast(invite)); }catch(e){ toast(invite); } };
@@ -1816,6 +1817,7 @@ attachInput(boardEl);
 attachInput($('board3d'));
 
 // ================= ONLINE MODE =================
+let pendingOnlineColor = 'w', pendingRoomMode = 'solo';
 // Seats: team A = A1 (room host), A2; team B = B1, B2. "solo" rooms use A1/B1 only.
 // In "duo" (2v2) rooms the two partners of a side alternate moves.
 const net = {
@@ -1971,7 +1973,18 @@ async function enterRoom(code, intent, saved, opts){
     for(const u of saved.moves){ const m = findUci(u); if(!m) break; applyMove(m, true); }
     net.joining = false; pushPresence();
   } else {
-    setTimeout(() => { if(net.room===r && !net.seat){ net.joining = false; render(); } }, 4500);
+    // nobody hosting this code yet (e.g. both friends typed the same code): the first one in becomes the host
+    setTimeout(() => {
+      if(net.room !== r || net.seat) return;
+      if(net.others.some(p => p.presence.seat==='A1')) return;
+      net.seat = 'A1'; net.joining = false;
+      net.mode = pendingRoomMode==='duo' ? 'duo' : 'solo';
+      net.colorA = pendingOnlineColor==='r' ? (Math.random()<.5?'w':'b') : (pendingOnlineColor || 'w');
+      net.privateRoom = true;
+      setupSeat(); pushPresence();
+      toast(`A sala ${code} estava vazia: agora ela é sua. Mande o código para seu amigo.`);
+      render();
+    }, 3500);
   }
   net.unsub = r.onPeers(ch => onRoomPeers(r, ch), () => { if(net.room===r) toast('Conexão com a sala perdida.'); });
   sound('start'); render();
@@ -2033,6 +2046,7 @@ function onRoomPeers(r, ch, decided){
   if(!net.spectator && net.myPeer){
     const clash = others.find(p => p.presence.seat === net.seat && p.peer < net.myPeer);
     if(clash){
+      if(net.seat==='A1'){ const H = clash.presence; net.mode = H.roomMode==='duo'?'duo':'solo'; net.colorA = H.colorA==='b'?'b':'w'; net.game = +H.game||1; }
       const s = pickSeat(others);
       if(s){ net.seat = s; } else { net.seat = 'spec'; net.spectator = true; toast('A sala está completa. Você está assistindo.'); }
       leaveTeamRoom(); setupSeat(); pushPresence();
@@ -2177,7 +2191,7 @@ $('chatTeam').onclick = () => { net.chatTab = 'team'; renderChat(); };
 $('chatForm').addEventListener('submit', e => { e.preventDefault(); sendChat($('chatInput').value); $('chatInput').value = ''; });
 
 // ---------- lobby buttons ----------
-let pendingOnlineColor = 'w', pendingRoomMode = 'solo';
+
 $('oColors').addEventListener('click', e => { const b = e.target.closest('.btn'); if(!b) return; pendingOnlineColor = b.dataset.c; [...$('oColors').children].forEach(x=>x.classList.toggle('on', x===b)); });
 $('oModes').addEventListener('click', e => { const b = e.target.closest('.btn'); if(!b) return; pendingRoomMode = b.dataset.m; [...$('oModes').children].forEach(x=>x.classList.toggle('on', x===b)); });
 $('oCreate').onclick = () => { $('ovSetup').classList.remove('on'); enterRoom(randCode(), 'private', null, {mode:pendingRoomMode, color:pendingOnlineColor}); };
