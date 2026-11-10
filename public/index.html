@@ -313,9 +313,9 @@ button,.btn,.lv,.chatTabs button,.iconBtn{touch-action:manipulation}
       <div class="onlineGrid">
         <div class="card">
           <h4>⚡ Partida rápida</h4>
-          <p>Entra numa sala aberta ou cria uma e espera alguém chegar.</p>
+          <p>Sem código: você entra na fila e joga com a próxima pessoa que também clicar aqui, por ordem de chegada.</p>
           <button class="btn primary" id="oQuick">Procurar oponente</button>
-          <h4 style="margin-top:6px">Salas abertas</h4>
+          <h4 style="margin-top:6px">Fila agora</h4>
           <div class="rooms" id="rooms"><p>Nenhuma sala aberta agora.</p></div>
         </div>
         <div class="card">
@@ -891,7 +891,8 @@ const V3 = (function(){
     s.quadraticCurveTo(-.2, .84, -.25, .62);
     s.quadraticCurveTo(-.28, .4, -.2, .2);
     GEO.nhead = new THREE.ExtrudeGeometry(s, {depth:.2, bevelEnabled:true, bevelThickness:.035, bevelSize:.03, bevelSegments:3, curveSegments:14});
-    GEO.nhead.translate(0, 0, -.1);
+    GEO.nhead.computeBoundingBox();
+    { const bb = GEO.nhead.boundingBox; GEO.nhead.translate(-(bb.min.x + bb.max.x)/2, 0, -(bb.min.z + bb.max.z)/2); }  // centre the head over the base
   }
   // outline ("inverted hull"): a slightly inflated back-face copy in a contrasting colour
   const HULL = {};
@@ -1157,7 +1158,8 @@ const SHAPES = {
   <linearGradient id="gb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5a5a5a"/><stop offset=".45" stop-color="#222"/><stop offset="1" stop-color="#050505"/></linearGradient>`;
   for(const c of ['w','b']) for(const t in SHAPES){
     const fill = c==='w'?'url(#gw)':'url(#gb)', stroke = c==='w'?'#2a1404':'#000000', det = c==='w'?'#5a3512':'#a8a8a8', eye = c==='w'?'#2b1d10':'#e9dcc6';
-    s += `<symbol id="pc-${c}${t}" viewBox="0 0 100 100"><g fill="${fill}" stroke="${stroke}" stroke-width="${c==='w'?4.4:3.6}" stroke-linejoin="round" stroke-linecap="round">${SHAPES[t]
+    const C = {p:[50,52.3], n:[48.1,47.5], b:[50,47.3], r:[50,51.5], q:[50,47.8], k:[50,46]}[t];  // measured centre of each drawing
+    s += `<symbol id="pc-${c}${t}" viewBox="0 0 100 100"><g transform="translate(${(50-C[0]).toFixed(1)} ${(50-C[1]).toFixed(1)})" fill="${fill}" stroke="${stroke}" stroke-width="${c==='w'?4.4:3.6}" stroke-linejoin="round" stroke-linecap="round">${SHAPES[t]
       .replace(/class="d"/g, `fill="none" stroke="${det}" stroke-width="2.4" opacity=".75"`)
       .replace(/class="e"/g, `fill="${eye}" stroke="none"`)}</g></symbol>`;
   }
@@ -1536,9 +1538,10 @@ function renderBars(){
     }
     $('botCard').innerHTML = net.spectator
       ? `<div class="avatar">👀</div><div><h2>Assistindo</h2><p>Você está como espectador nesta sala.</p></div>`
-      : `<div class="avatar">${net.mode==='duo'?'👥':'⚔️'}</div><div><h2>${net.mode==='duo'?'Duplas 2x2':'1 contra 1'}</h2><p>${hasOpp() ? 'Partida online contra pessoas reais.' : 'Compartilhe o código da sala.'}</p></div>`;
+      : (seek.on || (net.quick && !hasOpp())) ? `<div class="avatar">⚡</div><div><h2>Partida rápida</h2><p>Você entra na fila e joga com a próxima pessoa que chegar.</p></div>`
+      : `<div class="avatar">${net.mode==='duo'?'👥':'⚔️'}</div><div><h2>${net.quick ? 'Partida rápida' : net.mode==='duo'?'Duplas 2x2':'1 contra 1'}</h2><p>${hasOpp() ? 'Partida online contra pessoas reais.' : 'Compartilhe o código da sala.'}</p></div>`;
     $('seatsBox').innerHTML = seatsHTML; $('seatsBox').classList.toggle('hide', !seatsHTML);
-    $('roomCode').classList.remove('hide');
+    $('roomCode').classList.toggle('hide', !!net.quick || seek.on);
     const inRoom = Object.keys(net.players).length + (net.spectator ? 1 : 0) + net.others.filter(p => p.presence.seat==='spec').length;
     $('roomCode').innerHTML = `Sala <b>${esc(net.code)}</b><span style="font-size:12px">· ${inRoom} na sala</span><button class="btn" id="copyCode">Copiar código</button>`;
     const invite = window.__serverRoom ? location.origin + location.pathname + '#sala-' + net.code : net.code;
@@ -1563,6 +1566,11 @@ function renderStatus(){
   if(!started){ el.textContent = 'Escolha um modo para começar.'; return; }
   if(gameOver){ el.textContent = gameOver.text; return; }
   if(mode==='online'){
+    if(seek.on || (net.quick && !hasOpp() && !history.length)){
+      const n = net.seekers.length;
+      el.innerHTML = `<span>🔎 Procurando oponente…${n > 1 ? ` (${n} na fila)` : ''}</span>`;
+      return;
+    }
     if(net.spectator){ el.textContent = `Assistindo · vez das ${st.turn==='w'?'brancas':'pretas'}.`; return; }
     if(!net.seat){ el.textContent = net.joining ? 'Entrando na sala…' : 'Aguardando o anfitrião da sala…'; return; }
     if(!hasOpp()){ el.textContent = net.mode==='duo' ? 'Aguardando jogadores entrarem na sala…' : 'Aguardando oponente entrar na sala…'; return; }
@@ -1592,6 +1600,7 @@ function renderButtons(){
   $('bUndo').disabled = thinking || history.length < 1 || !started;
   $('bResign').disabled = !!gameOver || !started || history.length===0;
   if(on){
+    $('oLeave').textContent = (seek.on || (net.quick && !hasOpp() && !history.length)) ? 'Cancelar busca' : 'Sair da sala';
     const reqd = net.others.some(p => (+p.presence.rematch||0) === net.game+1);
     $('oDraw').disabled = net.spectator || !hasOpp() || !!gameOver || history.length<2 || net.myDraw===drawToken();
     $('oResign').disabled = net.spectator || !hasOpp() || !!gameOver;
@@ -1890,8 +1899,8 @@ async function connectRoom(){
     net.openRooms = ps.filter(p => !p.sameTab && p.presence && p.presence.open && typeof p.presence.open.code==='string')
       .map(p => { const o = p.presence.open; return {code:o.code.slice(0,12), name:cleanName(o.name), color:o.color==='b'?'b':'w', t:+o.t||0, quick:!!o.quick, mode:o.mode==='duo'?'duo':'solo', n:Math.max(1, Math.min(4, +o.n||1))}; })
       .filter(r => /^[a-z0-9]{4,12}$/.test(r.code));
-    updateOnlineUI(); if(mode==='online') renderBars();
-    quickMatchCheck();
+    seekCheck(ch.peers);
+    updateOnlineUI(); if(mode==='online') render();
   }, () => { net.unavailable = true; updateOnlineUI(); });
   updateOnlineUI();
   const fromHash = () => {
@@ -1901,29 +1910,57 @@ async function connectRoom(){
   fromHash(); window.addEventListener('hashchange', fromHash);
 })();
 
-function announce(){
-  if(!net.lobby) return;
-  const seats = seatsFor(net.mode), n = Object.keys(net.players).length;
-  const open = (mode==='online' && isHost() && !net.privateRoom && net.room && n < seats.length && (!history.length || net.mode==='duo'))
-    ? {code:net.code, name:net.name, color:net.colorA, t:net.openT, quick:net.quick, mode:net.mode, n} : null;
-  net.lobby.presence({open}).catch(()=>{});
+function announce(){ /* rooms are no longer listed in the lobby */ }
+
+// ---------- quick match: a queue in the lobby, paired by order of arrival ----------
+// Everyone looking for a game publishes {seek:{t,id}} in the lobby. All clients sort the same list the same way
+// (arrival time, then peer label) and pair 1st+2nd, 3rd+4th... The first of each pair hosts room "q<id>".
+const seek = {on:false, id:null, t:0, matched:false, pending:false, timer:null};
+net.seekers = [];
+const randId = () => Math.random().toString(36).slice(2,10).replace(/[^a-z0-9]/g,'') || String(Date.now()%1e8);
+async function startSeek(keepT){
+  if(!net.lobby){ toast('Modo online indisponível.'); return; }
+  await leaveOnline();
+  reqId++; mode = 'online'; started = true; resetBoard(); playerColor = 'w'; flipped = false;
+  Object.assign(net, {code:'', seat:null, spectator:false, quick:true, players:{}, others:[]});
+  seek.on = true; seek.matched = false; seek.pending = false; seek.id = randId(); seek.t = (typeof keepT === 'number' && keepT) ? keepT : Date.now();
+  try{ localStorage.setItem('xadrez_busca', seek.id); }catch(e){}
+  net.lobby.presence({seek:{t:seek.t, id:seek.id, name:net.name}}).catch(()=>{});
+  $('ovResult').classList.remove('on');
+  render();
+  seekCheck(net.lobby.peers ? net.lobby.peers() : []);
 }
+function stopSeek(){
+  seek.on = false; seek.pending = false; clearTimeout(seek.timer);
+  if(net.lobby) net.lobby.presence({seek:null}).catch(()=>{});
+}
+function seekCheck(peers){
+  net.seekers = (peers || []).filter(p => p.kind==='viewer' && p.presence && p.presence.seek && typeof p.presence.seek.id==='string')
+    .map(p => ({peer:p.peer, me:!!p.sameTab, t:+p.presence.seek.t || 0, id:p.presence.seek.id.replace(/[^a-z0-9]/g,'').slice(0,10)}))
+    .filter(s => s.id);
+  if((seek.on || seek.pending) && !net.seekers.some(s => s.me)) net.seekers.push({peer:'~', me:true, t:seek.t, id:seek.id});
+  net.seekers.sort((a,b) => (a.t - b.t) || (a.peer < b.peer ? -1 : a.peer > b.peer ? 1 : 0));
+  if(!seek.on || seek.matched) return;
+  const i = net.seekers.findIndex(s => s.me);
+  if(i < 0) return;
+  const mate = net.seekers[i % 2 === 0 ? i + 1 : i - 1];
+  if(!mate) return;                         // waiting for the next person in the queue
+  const host = net.seekers[i - (i % 2)];
+  seek.matched = true; seek.on = false; seek.pending = true;
+  const code = 'q' + host.id;
+  enterRoom(code, host.me ? 'quick' : 'quickjoin', null, {fromQueue:true, t:seek.t});
+}
+window.addEventListener('storage', e => {   // the search moved to another tab of this browser
+  if(e.key === 'xadrez_busca' && seek.on && e.newValue !== seek.id){ stopSeek(); mode = 'bot'; started = false; resetBoard(); render(); toast('A busca continuou na outra aba.'); }
+});
+
 function updateOnlineUI(){
   if(net.unavailable){ $('onWarn').classList.remove('hide'); $('onBody').classList.add('hide'); $('onlineCount').textContent = ''; return; }
   $('onWarn').classList.add('hide'); $('onBody').classList.remove('hide');
   if(!net.lobby){ $('onlineCount').textContent = 'Conectando ao modo online…'; return; }
   $('onlineCount').textContent = `🟢 ${net.lobbyCount} pessoa${net.lobbyCount===1?'':'s'} com o jogo aberto agora.`;
-  const list = $('rooms');
-  const rooms = net.openRooms.filter(r => r.code !== net.code);
-  list.innerHTML = rooms.length ? '' : '<p>Nenhuma sala aberta agora.</p>';
-  for(const r of rooms){
-    const d = document.createElement('div'); d.className='roomItem';
-    const sp = document.createElement('span');
-    sp.textContent = r.mode==='duo' ? `${r.name} · Duplas 2x2 · ${r.n}/4` : `${r.name} · 1 contra 1 · joga de ${r.color==='w'?'brancas':'pretas'}`;
-    const b = document.createElement('button'); b.className='btn'; b.textContent='Entrar';
-    b.onclick = () => { $('ovSetup').classList.remove('on'); enterRoom(r.code, 'join'); };
-    d.append(sp, b); list.appendChild(d);
-  }
+  const q = net.seekers.filter(s => !s.me).length;
+  $('rooms').innerHTML = q ? `<p>🔎 ${q} pessoa${q===1?'':'s'} na fila agora. Clique e você entra em seguida.</p>` : '<p>Ninguém na fila agora. Clique e você será o primeiro: quem chegar depois joga com você.</p>';
   const saved = loadSaved();
   const rb = $('resumeBox');
   if(saved && !saved.over && !(mode==='online' && net.code===saved.code)){
@@ -1956,10 +1993,12 @@ async function enterRoom(code, intent, saved, opts){
   if(!net.lobby){ toast('Modo online indisponível.'); return; }
   code = String(code||'').toLowerCase().replace(/[^a-z0-9]/g,'');
   if(code.length < 4){ toast('Código inválido.'); return; }
-  await leaveOnline();
+  const fromQueue = !!(opts && opts.fromQueue), qT = opts && opts.t;
+  if(!fromQueue && (seek.on || seek.pending)) stopSeek();
+  await leaveOnline(fromQueue);
   reqId++; mode = 'online'; started = true; resetBoard();
   Object.assign(net, {code, seat:null, spectator:false, joining:true, game:1, mode:'solo', colorA:'w', players:{}, others:[], hostSeen:false,
-    myDraw:null, drawOk:null, drawRejected:null, myRematch:0, over:null, privateRoom:intent==='private', quick:intent==='quick', openT:Date.now(),
+    myDraw:null, drawOk:null, drawRejected:null, myRematch:0, over:null, privateRoom:intent==='private', quick:intent==='quick' || intent==='quickjoin', openT:Date.now(),
     chatLog:{all:new Map(), team:new Map()}, myChat:{all:[], team:[]}, chatTab:'all', unread:{all:0, team:0}, notified:new Set(), lastCh:null});
   $('ovResult').classList.remove('on');
   render();
@@ -1972,11 +2011,15 @@ async function enterRoom(code, intent, saved, opts){
     const choice = intent==='quick' ? 'r' : ((opts && opts.color) || 'w');
     net.colorA = choice==='r' ? (Math.random()<.5?'w':'b') : choice;
     setupSeat(); pushPresence(); announce();
+    if(intent==='quick') setTimeout(() => { if(net.room === r && !hasOpp() && !history.length){ toast('O oponente não chegou. Voltando para a fila…'); startSeek(qT); } }, 12000);
   } else if(intent==='resume' && saved){
     net.seat = saved.seat; net.mode = saved.mode==='duo'?'duo':'solo'; net.game = saved.game||1; net.colorA = saved.colorA==='b'?'b':'w';
     setupSeat();
     for(const u of saved.moves){ const m = findUci(u); if(!m) break; applyMove(m, true); }
     net.joining = false; pushPresence();
+  } else if(intent==='quickjoin'){
+    // matched from the queue: if the host does not show up, go back to the queue
+    setTimeout(() => { if(net.room === r && !net.seat){ toast('O oponente não apareceu. Voltando para a fila…'); startSeek(qT); } }, 9000);
   } else {
     // nobody hosting this code yet (e.g. both friends typed the same code): the first one in becomes the host
     setTimeout(() => {
@@ -2047,7 +2090,7 @@ function onRoomPeers(r, ch, decided){
     net.joining = false;
     const s = pickSeat(others);
     if(!s){
-      if(net.quick){ toast('Essa sala encheu. Procurando outra…'); setTimeout(quickMatch, 300); return; }
+      if(net.quick){ toast('Essa sala encheu. Voltando para a fila…'); setTimeout(() => startSeek(), 300); return; }
       net.seat = 'spec'; net.spectator = true; toast('A sala está completa. Você está assistindo.');
     } else net.seat = s;
     setupSeat(); pushPresence();
@@ -2103,6 +2146,7 @@ function onRoomPeers(r, ch, decided){
     const players = Object.entries(net.players).filter(([s,p]) => !p.me);
     if(players.length && players.every(([s,p]) => (+p.P.rematch||0) === net.game+1)) startRematchAsHost();
   }
+  if(seek.pending && hasOpp()){ seek.pending = false; if(net.lobby) net.lobby.presence({seek:null}).catch(()=>{}); }
   announce(); checkNetEnd(); quickMatchCheck(); render();
 }
 function startRematchAsHost(){
@@ -2131,7 +2175,8 @@ function checkNetEnd(){
     gameOver = {res:'draw', text:'Empate por acordo.'}; sound('end'); onGameOver(); pushPresence();
   }
 }
-async function leaveOnline(){
+async function leaveOnline(keepSeek){
+  if(!keepSeek && (seek.on || seek.pending)) stopSeek();
   const r = net.room;
   if(net.unsub){ try{ net.unsub(); }catch(e){} net.unsub = null; }
   clearTimeout(net.decideTimer); net.decideTimer = null;
@@ -2227,16 +2272,8 @@ $('oCreate').onclick = () => { $('ovSetup').classList.remove('on'); enterRoom(ra
 $('oJoin').onclick = () => { const c = $('joinCode').value; if(!c.trim()) return; $('ovSetup').classList.remove('on'); enterRoom(c, 'join'); };
 $('joinCode').addEventListener('keydown', e => { if(e.key==='Enter') $('oJoin').click(); });
 $('oQuick').onclick = () => { $('ovSetup').classList.remove('on'); quickMatch(); };
-async function quickMatch(){
-  const rooms = net.openRooms.filter(r => r.code!==net.code && r.mode==='solo').sort((a,b)=>a.t-b.t);
-  if(rooms.length){ await enterRoom(rooms[0].code, 'join'); net.quick = true; }
-  else enterRoom(randCode(), 'quick');
-}
-function quickMatchCheck(){
-  if(mode!=='online' || !isHost() || !net.quick || hasOpp() || history.length) return;
-  const older = net.openRooms.filter(r => r.quick && r.mode==='solo' && r.code!==net.code && (r.t < net.openT || (r.t===net.openT && r.code < net.code))).sort((a,b)=>a.t-b.t)[0];
-  if(older){ enterRoom(older.code, 'join').then(()=>{ net.quick = true; }); }
-}
+const quickMatch = startSeek;
+function quickMatchCheck(){}
 $('oResign').onclick = () => {
   if(gameOver || !hasOpp() || net.spectator) return;
   net.over = {type:'resign', game:net.game};
@@ -2251,7 +2288,7 @@ function requestRematch(){
   else toast('Revanche pedida. Esperando os outros aceitarem…');
 }
 $('oRematch').onclick = requestRematch;
-$('oLeave').onclick = async () => { clearSaved(); await leaveOnline(); mode='bot'; started=false; resetBoard(); render(); openSetup('on'); };
+$('oLeave').onclick = async () => { clearSaved(); stopSeek(); await leaveOnline(); mode='bot'; started=false; resetBoard(); render(); openSetup('on'); };
 document.addEventListener('visibilitychange', () => { if(mode==='online') renderChat(); });
 
 
