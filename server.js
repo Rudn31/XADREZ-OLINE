@@ -89,6 +89,11 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
     return res.end(INDEX);
   }
+  // short link to the newest Android app (built by GitHub Actions on every update)
+  if (req.method === 'GET' && ['/apk', '/app', '/baixar'].includes(url.pathname)) {
+    res.writeHead(302, { Location: 'https://github.com/Rudn31/XADREZ-OLINE/releases/latest/download/XadrezOnline.apk', 'Cache-Control': 'no-store' });
+    return res.end();
+  }
   if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, { ok: true, online: clients.size });
 
   if (req.method === 'GET' && url.pathname === '/events') {

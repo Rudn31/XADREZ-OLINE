@@ -35,6 +35,7 @@ header h1 svg{width:30px;height:30px}
 .credit{grid-column:1/-1;text-align:center;font-size:11px;color:var(--muted);margin-top:4px}
 .credit a{color:var(--muted)}
 .iconBtn.off{opacity:.45}
+.appBtn{width:auto!important;padding:0 10px;display:inline-flex;align-items:center;font-weight:700;font-size:13px;text-decoration:none;gap:4px}
 .iconBtn{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:10px;width:38px;height:38px;font-size:17px}
 .boardWrap{display:flex;flex-direction:column;gap:10px;width:100%;max-width:min(100%,calc(100vh - 205px),720px);margin:0 auto}
 .bar{display:flex;align-items:center;gap:10px;min-height:46px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:5px 8px;backdrop-filter:blur(6px)}
@@ -250,7 +251,7 @@ button,.btn,.lv,.chatTabs button,.iconBtn{touch-action:manipulation}
 <div class="app">
   <header>
     <h1><svg viewBox="0 0 100 100"><use href="#pc-wn"/></svg> Xadrez <span>Online</span></h1>
-    <div class="hdrR"><div class="progress" id="progress"></div><select id="soundSet" class="sndSel" title="Conjunto de sons"><option value="classico">Sons: Clássico</option><option value="sfx">Sons: Efeitos</option><option value="piano">Sons: Piano</option><option value="nes">Sons: NES</option><option value="futuristic">Sons: Futurista</option><option value="madeira">Sons: Madeira (sintetizado)</option></select><button class="iconBtn" id="b3d" title="Alternar 2D / 3D" style="width:auto;padding:0 10px;font-weight:800;font-size:14px">3D</button><button class="iconBtn" id="bMusic" title="Música de fundo">🎵</button><button class="iconBtn" id="bSound" title="Sons do jogo">🔊</button></div>
+    <div class="hdrR"><div class="progress" id="progress"></div><select id="soundSet" class="sndSel" title="Conjunto de sons"><option value="classico">Sons: Clássico</option><option value="sfx">Sons: Efeitos</option><option value="piano">Sons: Piano</option><option value="nes">Sons: NES</option><option value="futuristic">Sons: Futurista</option><option value="madeira">Sons: Madeira (sintetizado)</option></select><a class="iconBtn appBtn" href="/apk" title="Baixar o app para Android">📲 App</a><button class="iconBtn" id="b3d" title="Alternar 2D / 3D" style="width:auto;padding:0 10px;font-weight:800;font-size:14px">3D</button><button class="iconBtn" id="bMusic" title="Música de fundo">🎵</button><button class="iconBtn" id="bSound" title="Sons do jogo">🔊</button></div>
   </header>
   <div class="boardWrap">
     <div class="bar" id="topBar"></div>
