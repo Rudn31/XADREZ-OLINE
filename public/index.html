@@ -357,25 +357,27 @@ button,.btn,.lv,.chatTabs button,.iconBtn{touch-action:manipulation}
 <script>
 // Adaptador: liga o modo online do jogo ao servidor próprio (server.js).
 window.__serverRoom = function(){
+  const BASE = window.__SERVER_BASE || '';
   return new Promise(resolve => {
     let peer = null, token = null, ready = false, connected = false;
     const rooms = new Map(); // name -> {presence, subs:Set, snap:[], t}
     let es;
-    const post = (url, body) => token ? fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({...body, token})}).catch(()=>{}) : Promise.resolve();
+    const post = (url, body) => token ? fetch(BASE + url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({...body, token})}).catch(()=>{}) : Promise.resolve();
     function deliver(name, list){
       const r = rooms.get(name); if(!r) return;
       r.snap = Object.freeze(list.map(p => Object.freeze({peer:p.peer, by:null, isMe:p.peer===peer, sameTab:p.peer===peer, kind:'viewer', guest:false, presence:Object.freeze(p.presence||{}), updatedAt:p.updatedAt})));
       for(const f of r.subs) try{ f({peers:r.snap, joined:[], left:[], updated:[]}); }catch(e){ console.error(e); }
     }
     function connect(){
-      try{ es = new EventSource('/events'); }catch(e){ resolve(null); return; }
+      if(navigator.onLine === false){ resolve(null); return; }
+      try{ es = new EventSource(BASE + '/events'); }catch(e){ resolve(null); return; }
       es.addEventListener('hello', e => {
         const d = JSON.parse(e.data); peer = d.peer; token = d.token; connected = true;
         for(const [name, r] of rooms) post('/presence', {room:name, presence:r.presence});
         if(!ready){ ready = true; resolve(lobby); }
       });
       es.addEventListener('peers', e => { try{ const d = JSON.parse(e.data); deliver(d.room, d.peers); }catch(_){} });
-      es.onerror = () => { connected = false; };
+      es.onerror = () => { connected = false; if(!ready) setTimeout(() => { if(!ready){ ready = true; try{ es.close(); }catch(_){} resolve(null); } }, 4000); };
     }
     function makeRoom(name){
       const r = {presence:{}, subs:new Set(), snap:Object.freeze([])};
@@ -1544,7 +1546,7 @@ function renderBars(){
     $('roomCode').classList.toggle('hide', !!net.quick || seek.on);
     const inRoom = Object.keys(net.players).length + (net.spectator ? 1 : 0) + net.others.filter(p => p.presence.seat==='spec').length;
     $('roomCode').innerHTML = `Sala <b>${esc(net.code)}</b><span style="font-size:12px">· ${inRoom} na sala</span><button class="btn" id="copyCode">Copiar código</button>`;
-    const invite = window.__serverRoom ? location.origin + location.pathname + '#sala-' + net.code : net.code;
+    const invite = window.__serverRoom ? (window.__SERVER_BASE || (location.origin + location.pathname)) + '/#sala-' + net.code : net.code;
     if(window.__serverRoom) $('copyCode').textContent = 'Copiar link de convite';
     $('copyCode').onclick = () => { try{ navigator.clipboard.writeText(invite).then(()=>toast(window.__serverRoom ? 'Link copiado! Mande para seu amigo.' : 'Código copiado!'), ()=>toast(invite)); }catch(e){ toast(invite); } };
   }

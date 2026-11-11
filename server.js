@@ -77,6 +77,13 @@ function send(res, code, obj) {
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
+  // the Android app loads the game from its own files and talks to this server from another origin
+  if (['/events', '/presence', '/leave', '/health'].includes(url.pathname)) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
+  }
 
   if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });

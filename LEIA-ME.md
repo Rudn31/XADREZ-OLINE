@@ -40,3 +40,17 @@ Outros serviços parecidos também funcionam (Railway, Fly.io, Koyeb): basta diz
 ## Créditos
 
 Os conjuntos de sons "Efeitos", "Piano", "NES" e "Futurista" são de Enigmahack, do projeto Lichess (github.com/lichess-org/lila), com licença AGPLv3 ou posterior. Por isso, este projeto também é distribuído sob a AGPLv3 ou posterior.
+
+## App Android (APK)
+
+A pasta `android/` tem o app Android com o jogo inteiro dentro:
+**contra os bots funciona sem internet**; o modo online usa o servidor do Render.
+
+A cada atualização enviada para o GitHub, o APK é gerado sozinho e publicado na página
+**Releases** do repositório (arquivo `XadrezOnline.apk`).
+
+**Assinatura:** sem configuração, o APK é assinado com a chave de teste `android/keystore/teste.jks`
+(pública, só para testes). Para assinar com a sua chave privada, cadastre em
+*Settings → Secrets and variables → Actions*:
+- `KEYSTORE_BASE64`: o arquivo `.jks` convertido em base64;
+- `KEYSTORE_PASSWORD`: a senha da chave.
